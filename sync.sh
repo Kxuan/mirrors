@@ -16,6 +16,21 @@ rsync_args="-rtlHp
     --bwlimit=1m
     --exclude-from=$PWD/exclude.txt
 "
+log_rotate() {
+    size=100m
+    f="$1"
+
+    [[ -z $(du -t $size "$f") ]] && return
+
+    for (( i=0;;i++ )); do
+        [[ ! -f "$f.$i" ]] && break
+    done
+
+    for ((;i>0;i--)); do
+        mv -n "$f.$((i-1))" "$f.$i" || return
+    done
+    mv -n "$f" "$f.0"
+}
 
 do_sync_one() {
     set -e
@@ -23,13 +38,16 @@ do_sync_one() {
 
     export TARGET_DIR="$root/$DISTRO"
     export TMP_DIR="$root/.tmp/$DISTRO"
-    export LOG_DIR="$root/.log/$DISTRO/$(date +%Y-%m-%d)"
-    export LOG_FILE="$LOG_DIR/$(date +%H:%M:%S).log"
+    export LOG_DIR="$root/.log/$DISTRO"
+    export LOG_FILE="$LOG_DIR/sync.log"
     export RSYNC_ARGS=( ${rsync_args} --temp-dir="$TMP_DIR" --log-file="$LOG_FILE" )
-    mkdir -p "$TMP_DIR" "$TARGET_DIR" "$root/.lock" "$LOG_DIR"
-    touch "$LOG_FILE"
+
     (
         flock 9 || exit 5
+
+        mkdir -p "$TMP_DIR" "$TARGET_DIR" "$root/.lock" "$LOG_DIR"
+        log_rotate "$LOG_FILE"
+        touch "$LOG_FILE"
         source ./sync.sh
     ) 9> "$root/.lock/$DISTRO.lock"
 }
@@ -57,7 +75,7 @@ do_sync_all() {
 }
 
 export root rsync_args
-export -f do_sync_one
+export -f do_sync_one log_rotate
 
 echo "Start syncing..."
 fail=()

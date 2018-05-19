@@ -16,3 +16,4 @@ CPUSchedulingPolicy=idle
 Nice=19
 PrivateTmp=yes
 NoNewPrivileges=yes
+KillSignal=SIGINT

@@ -3,12 +3,19 @@
 cd $(dirname $0)
 
 root=/data/mirrors
-exclude_list=exclude.txt
 retry=1
 repos=(*)
-bwlimit=1m
-
-fail=()
+rsync_args="-rtlHp
+    --safe-links
+    --delete-after
+    --timeout=600
+    --contimeout=60
+    --delay-updates
+    --no-motd
+    --max-size=10m
+    --bwlimit=1m
+    --exclude-from=$PWD/exclude.txt
+"
 
 do_sync_one() {
     set -e
@@ -18,10 +25,13 @@ do_sync_one() {
     export TMP_DIR="$root/.tmp/$DISTRO"
     export LOG_DIR="$root/.log/$DISTRO/$(date +%Y-%m-%d)"
     export LOG_FILE="$LOG_DIR/$(date +%H:%M:%S).log"
-
+    export RSYNC_ARGS=( ${rsync_args} --temp-dir="$TMP_DIR" --log-file="$LOG_FILE" )
     mkdir -p "$TMP_DIR" "$TARGET_DIR" "$root/.lock" "$LOG_DIR"
     touch "$LOG_FILE"
-    flock "$root/.lock/$DISTRO.lock" ./sync.sh
+    (
+        flock 9 || exit 5
+        source ./sync.sh
+    ) 9> "$root/.lock/$DISTRO.lock"
 }
 
 do_sync_all() {
@@ -46,14 +56,11 @@ do_sync_all() {
     return ${#fail[@]}
 }
 
-trap 'exit' SIGINT SIGTERM
-
-export EXCLUDE_LIST="$(readlink -f $exclude_list)"
-export BWLIMIT="$bwlimit"
-export root
+export root rsync_args
 export -f do_sync_one
 
 echo "Start syncing..."
+fail=()
 while ! do_sync_all "${repos[@]}" && [[ $retry -gt 0 ]]; do
     let retry--
     repos=( "${fail[@]}" )

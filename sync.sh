@@ -2,7 +2,7 @@
 
 cd $(dirname $0)
 
-root=/data/mirrors
+root=/data/lib/mirrors
 retry=1
 repos=(*)
 rsync_args="-rtlHp
